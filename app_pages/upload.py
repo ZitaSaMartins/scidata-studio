@@ -37,24 +37,25 @@ def render() -> None:
 
             st.session_state.df = df
             st.session_state.uploaded_filename = uploaded_file.name
-            if dataset_changed:
-                st.rerun()
-                st.success(f"✅ Successfully loaded: {uploaded_file.name}")
+            #if dataset_changed:
+            #    st.rerun()
+            st.success(f"✅ Successfully loaded: {uploaded_file.name}")
 
-                # Display basic info
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("📊 Total Rows", f"{df.shape[0]:,}")
-                with col2:
-                    st.metric("📋 Total Columns", df.shape[1])
-                with col3:
-                    st.metric("⚠️ Missing Values", df.isnull().sum().sum())
+            # Display basic info
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📊 Total Rows", f"{df.shape[0]:,}")
+            with col2:
+                st.metric("📋 Total Columns", df.shape[1])
+            with col3:
+                st.metric("⚠️ Missing Values", df.isnull().sum().sum())
 
-                # Preview
-                st.markdown("### Preview of Your Data")
-                st.dataframe(df.head(10), use_container_width=True)
+            # Preview
+            st.markdown("### Preview of Your Data")
+            #st.dataframe(df.head(10), use_container_width=True)
+            st.dataframe(df, height=450, width="stretch")
 
-                st.info("✨ Great! Your data is uploaded. Next step: Rename variables (optional) →")
+            st.info("✨ Great! Your data is uploaded. Next step: Rename variables (optional) →")
 
             if st.button("✏️ Rename Variables", type="primary"):
                 set_page("rename")

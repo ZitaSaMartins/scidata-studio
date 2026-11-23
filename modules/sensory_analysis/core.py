@@ -17,6 +17,10 @@ from .panel_performance import (
     _panel_discrimination,
     _panel_repeatability,
     _panel_scale,
+    _discrimination_power,
+    _product_characterization,
+    _product_profiles,
+    run_panel_analysis, 
 )
 from .profiling import _product_characterization, _qda, _temporal
 
@@ -32,7 +36,11 @@ ROUTES: dict[str, Callable[[pd.DataFrame], None]] = {
     "sensory_panel_repeatability": _panel_repeatability,
     "sensory_panel_agreement": _panel_agreement,
     "sensory_panel_scale": _panel_scale,
+    "sensory_discrimination_power": _discrimination_power,
     "sensory_product_characterization": _product_characterization,
+    "sensory_product_profiles": _product_profiles,
+    "sensory_panel": run_panel_analysis,  # All 7 tabs in one
+    "sensory_product_characterization": _product_characterization,     
     "sensory_cata": _cata,
     "sensory_jar": _jar,
     "sensory_hedonic": _hedonic,
