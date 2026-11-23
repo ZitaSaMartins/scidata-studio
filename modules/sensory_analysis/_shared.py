@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+import plotly.express as px
 import streamlit as st
 from scipy import stats
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
@@ -99,15 +99,34 @@ def _compact_letters(
     return {label: "".join(result[label]) or "—" for label in ordered}
 
 
+def heatmap_height(n_rows: int) -> int:
+    """Pixel height for a heatmap: ~30px per row plus room for title and axis, kept within one screen."""
+    return int(min(650, max(260, 30 * n_rows + 140)))
+
+
 def _heatmap(data: pd.DataFrame, title: str, fmt: str = ".2f") -> None:
-    width = max(7.0, 0.75 * data.shape[1] + 3)
-    height = max(4.0, 0.45 * data.shape[0] + 2)
-    fig, ax = plt.subplots(figsize=(width, height))
-    sns.heatmap(data, annot=True, fmt=fmt, cmap="RdYlBu_r", ax=ax)
-    ax.set_title(title)
-    fig.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+    """Annotated heatmap that fits the page.
+
+    Plotly with ``aspect="auto"`` stretches to the container width, and the
+    height grows with the number of rows but is capped, so large panels
+    (e.g. 15 assessors x 6 descriptors) stay readable without scrolling.
+    """
+    frame = data.copy()
+    frame.index = frame.index.map(str)
+    frame.columns = frame.columns.map(str)
+    fig = px.imshow(
+        frame,
+        text_auto=fmt,
+        aspect="auto",
+        color_continuous_scale="RdYlBu_r",
+        labels={"x": frame.columns.name or "", "y": frame.index.name or "", "color": "Value"},
+    )
+    fig.update_xaxes(type="category", side="bottom", tickangle=-30 if frame.shape[1] > 8 else 0)
+    fig.update_yaxes(type="category")
+    fig.update_layout(title=title, height=heatmap_height(frame.shape[0]), margin={"l": 10, "r": 10, "t": 50, "b": 10})
+    if frame.size > 300:  # too many cells to label legibly
+        fig.update_traces(texttemplate=None)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _scatter_labels(
