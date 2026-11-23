@@ -178,6 +178,7 @@ def _render_sensory() -> None:
     with st.expander(
         "🔍 Panel Analysis",
         expanded=st.session_state.get("page") in {
+            "sensory_panel_report",
             "sensory_panel_discrimination",
             "sensory_panel_repeatability",
             "sensory_panel_agreement",
@@ -188,6 +189,11 @@ def _render_sensory() -> None:
             "sensory_panel", 
         },
         ):
+        _nav_button(
+            "📑 Full Report (XLSTAT-style)",
+            "sensory_panel_report",
+            "sidebar_sensory_panel_report",
+        )
         _nav_button(
             "📊 Discrimination",
             "sensory_panel_discrimination",

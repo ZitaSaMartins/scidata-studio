@@ -22,6 +22,7 @@ from .panel_performance import (
     _product_profiles,
     run_panel_analysis, 
 )
+from .panel_report import run_panel_report
 from .profiling import _product_characterization, _qda, _temporal
 
 ROUTES: dict[str, Callable[[pd.DataFrame], None]] = {
@@ -39,6 +40,7 @@ ROUTES: dict[str, Callable[[pd.DataFrame], None]] = {
     "sensory_discrimination_power": _discrimination_power,
     "sensory_product_characterization": _product_characterization,
     "sensory_product_profiles": _product_profiles,
+    "sensory_panel_report": run_panel_report,
     "sensory_panel": run_panel_analysis,  # All 7 tabs in one
     "sensory_product_characterization": _product_characterization,     
     "sensory_cata": _cata,

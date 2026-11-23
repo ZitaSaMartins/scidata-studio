@@ -37,7 +37,7 @@ def test_standard_csv():
 
 
 def test_european_csv_semicolon_and_decimal_comma():
-    raw = "produto;nota;temperatura\nA;7,5;23\nB;8,25;24,1\n".encode()
+    raw = b"produto;nota;temperatura\nA;7,5;23\nB;8,25;24,1\n"
     df, fmt = read_csv_bytes(raw)
     assert (fmt.sep, fmt.decimal) == (";", ",")
     assert pd.api.types.is_float_dtype(df["nota"])

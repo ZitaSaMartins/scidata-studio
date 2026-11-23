@@ -47,6 +47,7 @@ SENSORY_PAGES = {
     "sensory_ranking",
     "sensory_qda",
     "sensory_temporal",
+    "sensory_panel_report",
     "sensory_panel_discrimination",
     "sensory_panel_repeatability",
     "sensory_panel_agreement",
