@@ -6,6 +6,7 @@ inputs, caching and display.
 
 from __future__ import annotations
 
+import io
 import re
 
 import numpy as np
@@ -22,8 +23,8 @@ from ._shared import _columns, _need
 from .panel_report import _fmt_p, _guess
 
 _NONE = "— none —"
-_HIGHER = "rgba(66,133,244,0.30)"   # significantly above the average product
-_LOWER = "rgba(219,68,55,0.30)"     # significantly below
+_HIGHER = "#00C7D1"   # significantly above the average product (XLSTAT's cyan)
+_LOWER = "#FF0000"    # significantly below (XLSTAT's red)
 _FACTOR_LIKE = r"^(obs|id|rank|order|session|rep|replicate|panel|assess|judge|subject|consumer)"
 
 
@@ -122,13 +123,19 @@ def _coefficients(res: dict, alpha: float, confidence: float) -> None:
     st.dataframe(shown.style.format(precision=3).format({"p-value": _fmt_p})
                  .apply(lambda row: [_cell_colour(row["Coefficient"], row["p-value"], alpha)] * len(row), axis=1),
                  width="stretch")
-    ordered = table.sort_values("Test value", ascending=False)
-    colours = [("#4285F4" if v > 0 else "#DB4437") if p < alpha else "#B0B0B0"
-               for v, p in zip(ordered["Test value"], ordered["p-value"], strict=True)]
-    fig = go.Figure(go.Bar(x=ordered.index, y=ordered["Test value"], marker_color=colours))
-    fig.update_layout(title=f"{product}: test values of the coefficients", yaxis_title="Test value", height=380,
-                      margin={"l": 10, "r": 10, "t": 50, "b": 10})
-    st.plotly_chart(fig, width="stretch")
+    c1, c2 = st.columns(2, vertical_alignment="bottom")
+    value = c1.segmented_control("Bars show", ["Coefficient", "Test value"], default="Coefficient",
+                                 key="characterization_coef_value") or "Coefficient"
+    every_product = c2.toggle("One chart per product", value=False, key="characterization_coef_all")
+    st.caption(f"Blue: significantly positive, red: significantly negative, white: not significant "
+               f"({format_alpha_percent(alpha)}). Descriptors sorted from the largest to the smallest value.")
+    if every_product:
+        grid = st.columns(2)
+        for i, name in enumerate(res["products"]):
+            with grid[i % 2]:
+                _coefficient_chart(coefficients[coefficients["Product"] == name].set_index("Descriptor"), name, value, alpha)
+    else:
+        _coefficient_chart(table, product, value, alpha)
     with st.expander("All products side by side"):
         columns = ["Coefficient", "p-value", "Test value"]
         tables = {c: cs.coefficients_wide(coefficients, c) for c in columns}
@@ -136,16 +143,33 @@ def _coefficients(res: dict, alpha: float, confidence: float) -> None:
         st.dataframe(wide.style.format(precision=3), width="stretch")
 
 
+def _coefficient_chart(table: pd.DataFrame, product: str, value: str, alpha: float) -> None:
+    """XLSTAT-style bar chart of one product's coefficients (or test values) by descriptor."""
+    ordered = table.sort_values(value, ascending=False)
+    significant = ordered["p-value"] < alpha
+    fill = np.where(~significant, "white", np.where(ordered["Coefficient"] > 0, "#4285F4", "#DB4437"))
+    line = np.where(~significant, "#555555", fill)
+    fig = go.Figure(go.Bar(
+        x=ordered.index, y=ordered[value], marker={"color": fill, "line": {"color": line, "width": 1}},
+        customdata=ordered["p-value"], hovertemplate="%{x}<br>" + value + ": %{y:.3f}<br>p-value: %{customdata:.4f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line_color="#555555", line_width=1)
+    fig.update_layout(title=product, xaxis_title="Descriptors", yaxis_title=f"{value}s", height=380,
+                      margin={"l": 10, "r": 10, "t": 50, "b": 10})
+    st.plotly_chart(fig, width="stretch", key=f"characterization_coef_chart_{product}")
+
+
 def _cell_colour(coefficient: float, p_value: float, alpha: float) -> str:
     if not np.isfinite(p_value) or p_value >= alpha:
         return ""
-    return f"background-color: {_HIGHER if coefficient > 0 else _LOWER}"
+    return f"background-color: {_HIGHER if coefficient > 0 else _LOWER}; color: black"
 
 
 def _means(res: dict, pca: cs.ProfilePCA, alpha: float) -> None:
     st.subheader("Adjusted means by product")
     st.caption("Least-squares means. Products are sorted by their F1 score and descriptors by their correlation with F1. "
-               f"Blue: significantly above the average product, red: significantly below ({format_alpha_percent(alpha)}).")
+               f"Blue: significantly above the average product, red: significantly below, white: not significant "
+               f"({format_alpha_percent(alpha)}, t test of the product's coefficient).")
     means = cs.sorted_means(res["means"], pca)
     coefficients = res["coefficients"].set_index(["Product", "Descriptor"])
 
@@ -155,7 +179,13 @@ def _means(res: dict, pca: cs.ProfilePCA, alpha: float) -> None:
               for d in frame.columns] for p in frame.index],
             index=frame.index, columns=frame.columns)
 
-    st.dataframe(means.style.format(precision=3).apply(colour, axis=None), width="stretch")
+    styled = means.style.format(precision=3).apply(colour, axis=None)
+    st.dataframe(styled, width="stretch")
+    buffer = io.BytesIO()
+    styled.to_excel(buffer, sheet_name="Adjusted means", engine="openpyxl")
+    st.download_button("Download as Excel (with colours)", buffer.getvalue(), "adjusted_means.xlsx",
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       icon=":material/download:", key="characterization_means_download")
 
 
 def _pca(res: dict, design: cs.CharacterizationDesign, pca: cs.ProfilePCA) -> None:

@@ -123,3 +123,21 @@ def test_unbalanced_data_uses_least_squares_means(data, design):
     np.testing.assert_allclose(sums, 0, atol=1e-9)
     raw = dropped.groupby("Product")["Cocoaa"].mean()
     assert not np.isclose(res["means"].loc["choc1", "Cocoaa"], raw["choc1"])
+
+
+def test_significance_colours_match_xlstat_table(result):
+    """XLSTAT fills a cell of the adjusted-means table when the product's coefficient is significant (5%)."""
+    import openpyxl
+
+    sheet = openpyxl.load_workbook(WORKBOOK)[SHEET]
+    descriptors = [sheet.cell(155, c).value for c in range(3, 17)]
+    coefficients = result["coefficients"].set_index(["Product", "Descriptor"])
+    fills = {"FF00C7D1": 1, "FFFF0000": -1}
+    for row in range(156, 162):
+        product = sheet.cell(row, 2).value
+        for col, descriptor in zip(range(3, 17), descriptors, strict=True):
+            fill = sheet.cell(row, col).fill
+            expected = fills.get(fill.fgColor.rgb, 0) if fill.fill_type == "solid" else 0
+            coef, p_value = coefficients.loc[(product, descriptor), ["Coefficient", "p-value"]]
+            actual = int(np.sign(coef)) if p_value < 0.05 else 0
+            assert actual == expected, f"{product} / {descriptor}"
