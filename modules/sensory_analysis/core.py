@@ -16,10 +16,10 @@ from .panel_report import run_panel_report
 from .profiling import _product_characterization, _qda, _temporal
 
 ROUTES: dict[str, Callable[[pd.DataFrame], None]] = {
-    "sensory_triangle": lambda df: _discrimination(df, "Triangle Test", 1 / 3, "triangle"),
-    "sensory_paired": lambda df: _discrimination(df, "Paired Comparison", 1 / 2, "paired"),
-    "sensory_duo_trio": lambda df: _discrimination(df, "Duo-Trio Test", 1 / 2, "duotrio"),
-    "sensory_tetrad": lambda df: _discrimination(df, "Tetrad Test", 1 / 3, "tetrad"),
+    "sensory_triangle": lambda df: _discrimination(df, "Triangle Test", "triangle", "triangle"),
+    "sensory_paired": lambda df: _discrimination(df, "Paired Comparison", "paired", "paired"),
+    "sensory_duo_trio": lambda df: _discrimination(df, "Duo-Trio Test", "duotrio", "duotrio"),
+    "sensory_tetrad": lambda df: _discrimination(df, "Tetrad Test", "tetrad", "tetrad"),
     "sensory_ranking": _ranking,
     "sensory_qda": _qda,
     "sensory_temporal": _temporal,

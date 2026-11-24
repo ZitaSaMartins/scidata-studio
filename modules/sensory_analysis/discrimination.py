@@ -18,46 +18,130 @@ from modules.stat_format import (
 )
 
 from ._shared import _columns, _compact_letters, _interpret_p, _need
+from .discrimination_stats import (
+    METHODS,
+    answers_outside_samples,
+    discrimination_summary,
+    score_responses,
+)
+
+_PER_ROW = "Answer + correct answer columns"
+_SINGLE = "One correct/incorrect column"
 
 
-def _discrimination(df: pd.DataFrame, name: str, chance: float, key: str) -> None:
-    st.header(name)
-    st.write(
-        f"Tests whether the number of correct responses exceeds chance ({chance:.3g}) "
-        "using an exact one-sided binomial test."
+def _guess_column(columns: list[str], include: str, exclude: str | None = None) -> int:
+    for index, column in enumerate(columns):
+        lowered = column.lower()
+        if include in lowered and (exclude is None or exclude not in lowered):
+            return index
+    return 0
+
+
+def _score_per_row(df: pd.DataFrame, key: str) -> pd.Series | None:
+    columns = df.columns.astype(str).tolist()
+    left, right = st.columns(2)
+    answer = left.selectbox(
+        "Assessor's answer column",
+        columns,
+        index=_guess_column(columns, "answer", exclude="correct"),
+        key=f"{key}_answer",
     )
-    if not _need(df.shape[1] > 0 and len(df) > 0, "Upload response-level data first."):
-        return
+    correct = right.selectbox(
+        "Correct answer column",
+        columns,
+        index=_guess_column(columns, "correct"),
+        key=f"{key}_correct_col",
+        help="The code of the sample the assessor should have picked in that row "
+        "(for a triangle test, the odd sample).",
+    )
+    if not _need(answer != correct, "Choose two different columns for the answer and the correct answer."):
+        return None
+    others = [c for c in columns if c not in {answer, correct}]
+    samples = st.multiselect(
+        "Sample columns (optional, used to check the codes)",
+        others,
+        default=[c for c in others if "sample" in c.lower()],
+        key=f"{key}_samples",
+    )
+    if samples:
+        for label, column in (("answer", answer), ("correct answer", correct)):
+            outside = answers_outside_samples(df, samples, column)
+            if outside.any():
+                st.warning(
+                    f"{int(outside.sum())} row(s) have an {label} that is not one of the samples "
+                    "served in that row. Check the codes."
+                )
+                st.dataframe(df.loc[outside], width="stretch")
+    return score_responses(df[answer], df[correct])
+
+
+def _score_single_column(df: pd.DataFrame, key: str) -> pd.Series | None:
     outcome = st.selectbox("Response / correct column", df.columns.tolist(), key=f"{key}_outcome")
     values = df[outcome].dropna().unique().tolist()
     if not _need(len(values) >= 1, "The response column must contain at least one observed outcome."):
-        return
+        return None
     if len(values) == 1:
-        marks_correct = st.radio(
+        marks_correct = st.segmented_control(
             f"Does the value '{values[0]}' represent a correct response?",
             ["Yes", "No"],
+            default="Yes",
             key=f"{key}_single_outcome",
-            horizontal=True,
         )
+        if marks_correct is None:
+            return None
         correct_value = values[0] if marks_correct == "Yes" else object()
     else:
         correct_value = st.selectbox("Value meaning correct", values, key=f"{key}_correct")
-    alpha = select_significance_level()
-    valid = df[outcome].notna()
-    successes = int((df.loc[valid, outcome] == correct_value).sum())
+    scored = (df[outcome] == correct_value).astype("boolean")
+    scored[df[outcome].isna()] = pd.NA
+    return scored
+
+
+def _discrimination(df: pd.DataFrame, name: str, method_key: str, key: str) -> None:
+    method = METHODS[method_key]
+    chance = method.guess
+    st.header(name)
+    st.write(
+        f"Tests whether the number of correct responses exceeds chance ({chance:.3g}) "
+        "using an exact one-sided binomial test, and estimates d-prime with the "
+        "Thurstonian model."
+    )
+    if not _need(df.shape[1] > 0 and len(df) > 0, "Upload response-level data first."):
+        return
+    columns = df.columns.astype(str).tolist()
+    has_correct_column = len(columns) >= 2 and any("correct" in c.lower() for c in columns)
+    layout = st.segmented_control(
+        "Data layout",
+        [_PER_ROW, _SINGLE],
+        default=_PER_ROW if has_correct_column else _SINGLE,
+        key=f"{key}_layout",
+        help="Use the first option when each row holds the assessor's answer and the correct "
+        "answer for that row (as in an XLSTAT design sheet). Use the second when a column "
+        "already says whether each answer was right.",
+    )
+    if layout is None:
+        st.info("Choose a data layout.")
+        return
+    scored = _score_per_row(df, key) if layout == _PER_ROW else _score_single_column(df, key)
+    if scored is None:
+        return
+    valid = scored.notna()
     total = int(valid.sum())
-    result = stats.binomtest(successes, total, chance, alternative="greater")
-    critical_correct = next(
-        (
-            count
-            for count in range(total + 1)
-            if stats.binomtest(count, total, chance, alternative="greater").pvalue < alpha
-        ),
-        total + 1,
-    )
-    critical_display: int | str = (
-        critical_correct if critical_correct <= total else "Not attainable"
-    )
+    if not _need(total > 0, "No rows with a usable answer."):
+        return
+    missing = int((~valid).sum())
+    if missing:
+        st.caption(f"{missing} row(s) with a missing value were left out.")
+    successes = int(scored[valid].sum())
+
+    if layout == _PER_ROW:
+        with st.expander(f"Per-assessor results ({successes} correct of {total})"):
+            marks = scored.map({True: "+", False: "-"}, na_action="ignore")
+            st.dataframe(df.assign(**{"Correct / Incorrect": marks}), width="stretch")
+
+    alpha = select_significance_level()
+    test, parameters = discrimination_summary(successes, total, method, alpha)
+    critical = test["Critical correct"]
     st.dataframe(
         with_formatted_p_values(
             pd.DataFrame(
@@ -66,22 +150,39 @@ def _discrimination(df: pd.DataFrame, name: str, chance: float, key: str) -> Non
                     "Total": [total],
                     "Observed proportion": [successes / total],
                     "Chance proportion": [chance],
-                    f"Critical correct (α={format_alpha(alpha)})": [critical_display],
-                    "Exact p-value": [result.pvalue],
-                    "95% CI low": [result.proportion_ci().low],
-                    "95% CI high": [result.proportion_ci().high],
+                    "d-prime": [test["d-prime"]],
+                    f"Critical correct (α={format_alpha(alpha)})": [
+                        critical if critical is not None else "Not attainable"
+                    ],
+                    "Exact p-value": [test["p-value"]],
+                    "Power": [test["Power"]],
                 }
             ),
             ["Exact p-value"],
         ),
         width="stretch",
     )
+    confidence = f"{(1 - alpha) * 100:g}%"
+    st.subheader(f"Estimated parameters ({method.name}, Clopper-Pearson {confidence} CI)")
+    st.dataframe(
+        parameters.rename(
+            columns={
+                "Lower bound": f"Lower bound ({confidence})",
+                "Upper bound": f"Upper bound ({confidence})",
+            }
+        ),
+        width="stretch",
+    )
+    note = "Power is the binomial power of the test at the observed proportion of correct answers."
+    if method_key == "paired":
+        note += " The paired comparison uses the directional (2-AFC) model."
+    st.caption(note)
     fig, ax = plt.subplots(figsize=(7, 3.5))
     ax.bar(["Observed", "Chance"], [successes / total, chance], color=["#2a9d8f", "#bdbdbd"])
     ax.set(ylim=(0, 1), ylabel="Correct response proportion", title=name)
     st.pyplot(fig)
     plt.close(fig)
-    if result.pvalue < alpha:
+    if test["p-value"] < alpha:
         st.success("The panel discriminated above chance.")
     else:
         st.info("The observed correct rate is not convincingly above chance.")
