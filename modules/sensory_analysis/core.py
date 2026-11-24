@@ -12,16 +12,6 @@ from .cata_jar import _cata, _jar
 from .discrimination import _discrimination, _ranking
 from .hedonic import _external_preference, _hedonic, _internal_preference, _segmentation
 from .multivariate import _gpa, _hac, _mfa, _pca, _pls, _statis
-from .panel_performance import (
-    _panel_agreement,
-    _panel_discrimination,
-    _panel_repeatability,
-    _panel_scale,
-    _discrimination_power,
-    _product_characterization,
-    _product_profiles,
-    run_panel_analysis, 
-)
 from .panel_report import run_panel_report
 from .profiling import _product_characterization, _qda, _temporal
 
@@ -33,16 +23,8 @@ ROUTES: dict[str, Callable[[pd.DataFrame], None]] = {
     "sensory_ranking": _ranking,
     "sensory_qda": _qda,
     "sensory_temporal": _temporal,
-    "sensory_panel_discrimination": _panel_discrimination,
-    "sensory_panel_repeatability": _panel_repeatability,
-    "sensory_panel_agreement": _panel_agreement,
-    "sensory_panel_scale": _panel_scale,
-    "sensory_discrimination_power": _discrimination_power,
     "sensory_product_characterization": _product_characterization,
-    "sensory_product_profiles": _product_profiles,
     "sensory_panel_report": run_panel_report,
-    "sensory_panel": run_panel_analysis,  # All 7 tabs in one
-    "sensory_product_characterization": _product_characterization,     
     "sensory_cata": _cata,
     "sensory_jar": _jar,
     "sensory_hedonic": _hedonic,
@@ -76,7 +58,7 @@ def run_sensory_analysis(
         "Descriptive Analysis (Sensory Profile)": "sensory_qda",
         "Hedonic Analysis (Liking Scores)": "sensory_hedonic",
         "Attribute Ratings Summary": "sensory_pca",
-        "Panelist Performance": "sensory_panel_repeatability",
+        "Panelist Performance": "sensory_panel_report",
         "Product Comparison": "sensory_product_characterization",
     }
     labels = list(options)
@@ -107,7 +89,7 @@ def attribute_summary(df: pd.DataFrame) -> None:
 
 def panelist_performance(df: pd.DataFrame) -> None:
     """Compatibility wrapper for the original panelist workflow."""
-    _panel_repeatability(_normalize_columns(df))
+    run_panel_report(_normalize_columns(df))
 
 
 def product_comparison(df: pd.DataFrame) -> None:

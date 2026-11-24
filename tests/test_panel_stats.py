@@ -176,3 +176,44 @@ def test_incomplete_design_drops_interaction():
     assert "Product*Assessor" not in anovas["Score"]["Source"].tolist()
     score = ps.performance_score(ps.assessor_tests(df, design, anovas))
     assert "No interaction" not in score.index
+
+
+def test_kendall_w_per_descriptor(data, design):
+    means = ps.assessor_product_means(data, design)
+    kendall = ps.kendall_w_all(means).set_index("Descriptor")
+    # Same value the former Agreement menu gave for Smoothness
+    assert kendall.loc["Smoothness", "W"] == pytest.approx(0.3154, abs=1e-4)
+    assert kendall.loc["Smoothness", "DF"] == 13
+    assert (kendall["W"].between(0, 1)).all()
+    assert kendall.loc["Feet feeling", "W"] > kendall.loc["Smoothness", "W"]
+
+
+def test_kendall_w_is_nan_without_variation():
+    df = pd.DataFrame({"A": list("aabb"), "P": list("xyxy"), "S": [1.0, 1.0, 2.0, 2.0]})
+    design = ps.PanelDesign("A", "P", ("S",))
+    result = ps.kendall_w(ps.assessor_product_means(df, design), "S")
+    assert np.isnan(result["W"])
+
+
+def test_assessor_correlations_are_symmetric(data, design):
+    corr = ps.assessor_correlations(ps.assessor_product_means(data, design), "Touch")
+    assert corr.shape == (15, 15)
+    assert np.allclose(corr.to_numpy(), corr.to_numpy().T)
+    assert np.allclose(np.diag(corr), 1)
+
+
+def test_scale_usage_levels_sum_to_zero_on_balanced_data(data, design):
+    usage = ps.scale_usage(data, design)
+    level = ps.scale_usage_pivot(usage, "Level vs panel", [str(i) for i in range(1, 16)], list(DESCRIPTORS))
+    assert np.allclose(level.sum(), 0)
+    row = usage[(usage["Assessor"] == "1") & (usage["Descriptor"] == "Smoothness")].iloc[0]
+    assert row["Range"] == pytest.approx(row["Max"] - row["Min"])
+
+
+def test_within_session_sd(data, design):
+    sd = ps.within_session_sd(data, design)
+    assert sd.shape == (15, 6)
+    assert sd.index[:2].tolist() == ["1", "2"]
+    # two sessions: SD of a pair = |a - b| / sqrt(2)
+    sub = data[(data["Assessor"] == 1) & (data["Product"] == 1)]["Smoothness"]
+    assert abs(sub.iloc[0] - sub.iloc[1]) / np.sqrt(2) == pytest.approx(sub.std())

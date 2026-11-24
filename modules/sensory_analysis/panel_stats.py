@@ -469,3 +469,75 @@ def assessor_clustering(means: pd.DataFrame, standardize: bool = False):
     if standardize:
         data = (data - data.mean()) / data.std(ddof=0).replace(0, 1)
     return linkage(data.to_numpy(), method="ward"), list(data.index)
+
+
+# --------------------------------------------------------------------------- #
+# Agreement, scale usage, within-session spread
+# --------------------------------------------------------------------------- #
+
+def _product_by_assessor(means: pd.DataFrame, descriptor: str) -> pd.DataFrame:
+    """Products as rows, assessors as columns, for one descriptor (complete rows only)."""
+    table = means[descriptor].unstack(level=0)
+    table = table.reindex(columns=_assessor_order(means))
+    return table.dropna()
+
+
+def kendall_w(means: pd.DataFrame, descriptor: str) -> dict:
+    """Kendall's coefficient of concordance on assessor x product means, with tie correction.
+
+    Each assessor ranks the products; W = 1 means identical rankings, 0 none.
+    Returns NaN W when every assessor gives all products the same score.
+    """
+    table = _product_by_assessor(means, descriptor)
+    n, m = table.shape  # products, assessors
+    out = {"Descriptor": descriptor, "W": np.nan, "Chi-square": np.nan, "DF": n - 1, "Pr > Chi²": np.nan,
+           "Assessors": m, "Products": n}
+    if n < 2 or m < 2:
+        return out
+    ranks = table.rank(axis=0)
+    rank_sums = ranks.sum(axis=1)
+    ties = sum(int((c ** 3 - c).sum()) for c in (table[col].value_counts().to_numpy() for col in table.columns))
+    denominator = m ** 2 * (n ** 3 - n) - m * ties
+    if denominator <= 0:
+        return out
+    w = 12 * float(((rank_sums - rank_sums.mean()) ** 2).sum()) / denominator
+    chi2 = m * (n - 1) * w
+    out.update({"W": w, "Chi-square": chi2, "Pr > Chi²": float(stats.chi2.sf(chi2, n - 1))})
+    return out
+
+
+def kendall_w_all(means: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame([kendall_w(means, d) for d in means.columns])
+
+
+def assessor_correlations(means: pd.DataFrame, descriptor: str) -> pd.DataFrame:
+    """Spearman correlation between assessors' product means for one descriptor."""
+    return _product_by_assessor(means, descriptor).corr(method="spearman")
+
+
+def scale_usage(df: pd.DataFrame, design: PanelDesign) -> pd.DataFrame:
+    """Per assessor and descriptor: mean, level vs panel (centered mean), SD, min, max, range."""
+    data = _prepare(df, design)
+    long = data.melt(id_vars=[design.assessor], value_vars=list(design.descriptors),
+                     var_name="Descriptor", value_name="_value").dropna(subset=["_value"])
+    stats_ = long.groupby([design.assessor, "Descriptor"], sort=False)["_value"].agg(["mean", "std", "min", "max"]).reset_index()
+    panel_mean = long.groupby("Descriptor")["_value"].mean()
+    stats_["Level vs panel"] = stats_["mean"] - stats_["Descriptor"].map(panel_mean)
+    stats_["Range"] = stats_["max"] - stats_["min"]
+    stats_ = stats_.rename(columns={design.assessor: "Assessor", "mean": "Mean", "std": "SD", "min": "Min", "max": "Max"})
+    return stats_
+
+
+def scale_usage_pivot(usage: pd.DataFrame, value: str, assessors: list, descriptors: list) -> pd.DataFrame:
+    table = usage.pivot(index="Assessor", columns="Descriptor", values=value)
+    return table.reindex(index=assessors, columns=descriptors)
+
+
+def within_session_sd(df: pd.DataFrame, design: PanelDesign) -> pd.DataFrame | None:
+    """Mean over products of the SD between an assessor's repeated ratings of the same product."""
+    data = _prepare(df, design)
+    if not has_replicates(data, design):
+        return None
+    sd = data.groupby([design.assessor, design.product])[list(design.descriptors)].std()
+    result = sd.groupby(level=0).mean()
+    return result.reindex(_ordered_levels(data[design.assessor]))

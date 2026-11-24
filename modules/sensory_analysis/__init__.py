@@ -7,7 +7,8 @@ continue to work unchanged. Internals are split by workflow family:
 - ``_shared``: data prep, significance labelling, and common plots.
 - ``discrimination``: triangle/paired/duo-trio/tetrad and ranking tests.
 - ``profiling``: QDA, temporal curves, product characterization.
-- ``panel_performance``: panelist discrimination, repeatability, agreement, scale usage.
+- ``panel_stats``: panel performance statistics (XLSTAT-style), tested against XLSTAT.
+- ``panel_report``: the Panel Analysis Report page built on ``panel_stats``.
 - ``cata_jar``: Check-All-That-Apply and Just-About-Right penalty analysis.
 - ``hedonic``: liking comparisons, segmentation, and preference mapping.
 - ``multivariate``: PCA, GPA, STATIS, HAC, MFA, PLS.

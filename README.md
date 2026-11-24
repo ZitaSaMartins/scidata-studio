@@ -338,7 +338,8 @@ data-analysis-dashboard/
 │   │   ├── _shared.py             # Data prep, significance labelling, common plots
 │   │   ├── discrimination.py      # Triangle/paired/duo-trio/tetrad and ranking tests
 │   │   ├── profiling.py           # QDA, temporal curves, product characterization
-│   │   ├── panel_performance.py   # Panelist discrimination, repeatability, agreement, scale
+│   │   ├── panel_stats.py         # Panel performance statistics (XLSTAT-style, tested)
+│   │   ├── panel_report.py        # Panel Analysis Report page
 │   │   ├── cata_jar.py            # Check-All-That-Apply and JAR penalty analysis
 │   │   ├── hedonic.py             # Liking comparisons, segmentation, preference mapping
 │   │   ├── multivariate.py        # PCA, GPA, STATIS, HAC, MFA, PLS

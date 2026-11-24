@@ -17,6 +17,7 @@ import streamlit as st
 from scipy.cluster.hierarchy import dendrogram
 
 from . import panel_stats as ps
+from ._shared import heatmap_height
 
 _NONE = "— none —"
 
@@ -61,6 +62,9 @@ def _compute(data: pd.DataFrame, assessor: str, product: str, session: str | Non
         "mfa": (mfa_corr, mfa_ratio),
         "cluster": ps.assessor_clustering(means, standardize=False),
         "cluster_std": ps.assessor_clustering(means, standardize=True),
+        "kendall": ps.kendall_w_all(means),
+        "usage": ps.scale_usage(data, design),
+        "within_sd": ps.within_session_sd(data, design),
     })
     return result
 
@@ -88,6 +92,21 @@ def _fmt_p(p: float) -> str:
 
 def _bold_if(condition):
     return lambda v: "font-weight: 700" if condition(v) else ""
+
+
+def _table_heatmap(table: pd.DataFrame, title: str, colorscale: str, fmt: str = ".2f",
+                   zmid: float | None = None, zrange: tuple[float, float] | None = None) -> None:
+    """Annotated heatmap sized to the page (rows = assessors)."""
+    frame = table.copy()
+    frame.index = frame.index.map(str)
+    frame.columns = frame.columns.map(str)
+    kwargs = {"zmin": zrange[0], "zmax": zrange[1]} if zrange else {}
+    fig = px.imshow(frame, text_auto=fmt, aspect="auto", color_continuous_scale=colorscale,
+                    color_continuous_midpoint=zmid, **kwargs)
+    fig.update_xaxes(type="category", side="bottom")
+    fig.update_yaxes(type="category")
+    fig.update_layout(title=title, height=heatmap_height(frame.shape[0]), margin={"l": 10, "r": 10, "t": 50, "b": 10})
+    st.plotly_chart(fig, width="stretch")
 
 
 def _cap_colour(value) -> str:
@@ -165,7 +184,7 @@ def _cap(res: dict) -> None:
                f"larger than the panel's, significant at p < {ps.ALPHA}.")
 
 
-def _plots(data: pd.DataFrame, assessor: str, product: str, descriptors: list[str]) -> None:
+def _plots(data: pd.DataFrame, assessor: str, product: str, descriptors: list[str], means: pd.DataFrame) -> None:
     descriptor = st.selectbox("Descriptor", descriptors, key="panel_report_plot_descriptor")
     by = st.radio("Group by", [product, assessor], horizontal=True, key="panel_report_plot_by")
     ordered = sorted(data[by].astype(str).unique(), key=lambda v: (float(v) if v.replace(".", "", 1).isdigit() else np.inf, v))
@@ -177,6 +196,23 @@ def _plots(data: pd.DataFrame, assessor: str, product: str, descriptors: list[st
     other = assessor if by == product else product
     fig = px.strip(plot_data.assign(**{other: data[other].astype(str)}), x=by, y=descriptor, color=other, category_orders={by: ordered})
     fig.update_layout(showlegend=False)
+    st.plotly_chart(fig, width="stretch")
+
+    st.subheader("Each assessor vs the panel average")
+    st.caption("One line per assessor (mean over sessions) and the panel average in black. "
+               "Lines that cross the black line often or sit far from it show assessors who rank or score the products differently. "
+               "Click names in the legend to hide or isolate assessors.")
+    profile = means[descriptor].unstack(level=0)  # products x assessors
+    profile = profile.reindex(columns=list(means.index.get_level_values(0).unique()))
+    products = [str(p) for p in profile.index]
+    fig = go.Figure()
+    for who in profile.columns:
+        fig.add_trace(go.Scatter(x=products, y=profile[who], mode="lines+markers", name=str(who), opacity=0.55,
+                                 line={"width": 1.5}, marker={"size": 5}))
+    fig.add_trace(go.Scatter(x=products, y=profile.mean(axis=1), mode="lines+markers", name="Panel average",
+                             line={"color": "black", "width": 4}, marker={"size": 8}))
+    fig.update_layout(xaxis={"title": product, "type": "category"}, yaxis_title=descriptor, height=480, hovermode="x unified",
+                      legend_title_text=assessor)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -253,6 +289,47 @@ def _assessors(res: dict) -> None:
     score = res["score"]
     st.dataframe(score.style.background_gradient(cmap="Greens", axis=1, subset=pd.IndexSlice[["Total"], :]), width="stretch")
 
+    st.subheader("Scale usage")
+    st.caption("How each assessor uses the scale. **Level vs panel**: the assessor's mean minus the panel mean "
+               "(red = scores higher than the panel, blue = lower). **SD**: spread of the assessor's ratings "
+               "(low = uses only a small part of the scale).")
+    usage = res["usage"]
+    assessors_order = list(res["score"].columns)
+    descriptors = list(res["kept"])
+    level = ps.scale_usage_pivot(usage, "Level vs panel", assessors_order, descriptors)
+    bound = float(np.nanmax(np.abs(level.to_numpy()))) or 1.0
+    _table_heatmap(level, "Level vs panel (assessor mean − panel mean)", "RdBu_r", zmid=0, zrange=(-bound, bound))
+    _table_heatmap(ps.scale_usage_pivot(usage, "SD", assessors_order, descriptors), "Spread of ratings (SD)", "Purples")
+    with st.expander("Full scale-usage table"):
+        st.dataframe(usage.style.format({c: "{:.2f}" for c in ["Mean", "SD", "Min", "Max", "Level vs panel", "Range"]}),
+                     hide_index=True, width="stretch")
+
+
+def _agreement(res: dict, descriptors: list[str]) -> None:
+    st.subheader("Kendall's coefficient of concordance (W)")
+    st.caption("Do the assessors rank the products in the same order? Computed on each assessor's product means. "
+               "W = 1: identical rankings; W = 0: no agreement. Bold: agreement significantly above chance (p < 0.05).")
+    kendall = res["kendall"]
+    st.dataframe(
+        kendall.style.format({"W": "{:.3f}", "Chi-square": "{:.2f}", "Pr > Chi²": _fmt_p})
+        .map(_bold_if(lambda v: isinstance(v, float) and v < ps.ALPHA), subset=["Pr > Chi²"]),
+        hide_index=True, width="stretch",
+    )
+    fig = px.bar(kendall.sort_values("W", ascending=False), x="Descriptor", y="W", range_y=[0, 1],
+                 title="Panel agreement by descriptor")
+    st.plotly_chart(fig, width="stretch")
+
+    st.subheader("Correlation between assessors (Spearman)")
+    st.caption("How similarly each pair of assessors ranks the products for one descriptor. "
+               "An assessor with mostly low or negative correlations disagrees with the rest of the panel.")
+    descriptor = st.selectbox("Descriptor", descriptors, key="panel_report_agreement_descriptor")
+    corr = ps.assessor_correlations(res["means"], descriptor)
+    _table_heatmap(corr, f"Spearman correlation between assessors: {descriptor}", "RdBu_r", zmid=0, zrange=(-1, 1))
+    others = corr.where(~np.eye(len(corr), dtype=bool)).mean().sort_values()
+    st.markdown("**Mean correlation with the other assessors** (lowest first)")
+    st.dataframe(others.to_frame("Mean ρ").T.style.format("{:.2f}").background_gradient(cmap="RdYlGn", axis=1, vmin=-1, vmax=1),
+                 width="stretch")
+
 
 def _means(res: dict) -> None:
     means = res["means"]
@@ -288,8 +365,13 @@ def _means(res: dict) -> None:
 
 
 def _sessions(res: dict, session: str | None) -> None:
+    if res.get("within_sd") is not None:
+        st.subheader("Spread between repeated ratings (mean within-product SD)")
+        st.caption("For each assessor and descriptor, the standard deviation between the repeated ratings of the same product, "
+                   "averaged over products. It shows how big the inconsistency is, in scale units: lower is more consistent.")
+        _table_heatmap(res["within_sd"], "Lower SD = more consistent", "Oranges")
     if not session or res["repeatability"] is None:
-        st.info("Select a Session column to see repeatability across sessions.")
+        st.info("Select a Session column to see the session tests.")
         return
     rep = res["repeatability"]
     st.subheader("Session repeatability: Friedman test (or Wilcoxon if there are only 2 sessions)")
@@ -373,7 +455,7 @@ def run_panel_report(df: pd.DataFrame) -> None:
         return
 
     tabs = st.tabs(["📋 Summary", "📊 ANOVA", "🎯 CAP table", "📦 Box & strip plots", "🧭 PCA & MFA",
-                    "👤 Assessors", "📐 Means & consensus", "🔁 Sessions", "🌳 Clustering"])
+                    "👤 Assessors", "🤝 Agreement", "📐 Means & consensus", "🔁 Sessions", "🌳 Clustering"])
     with tabs[0]:
         _summary(data, assessor, product, session, descriptors)
     with tabs[1]:
@@ -387,14 +469,16 @@ def run_panel_report(df: pd.DataFrame) -> None:
     with tabs[2]:
         _cap(res)
     with tabs[3]:
-        _plots(data, assessor, product, kept)
+        _plots(data, assessor, product, kept, res["means"])
     with tabs[4]:
         _multivariate(res, kept)
     with tabs[5]:
         _assessors(res)
     with tabs[6]:
-        _means(res)
+        _agreement(res, kept)
     with tabs[7]:
-        _sessions(res, session)
+        _means(res)
     with tabs[8]:
+        _sessions(res, session)
+    with tabs[9]:
         _clustering(res)

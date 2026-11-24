@@ -177,57 +177,12 @@ def _render_sensory() -> None:
 
     with st.expander(
         "🔍 Panel Analysis",
-        expanded=st.session_state.get("page") in {
-            "sensory_panel_report",
-            "sensory_panel_discrimination",
-            "sensory_panel_repeatability",
-            "sensory_panel_agreement",
-            "sensory_panel_scale",
-            "sensory_discrimination_power",
-            "sensory_product_characterization",
-            "sensory_product_profiles",
-            "sensory_panel", 
-        },
-        ):
+        expanded=st.session_state.get("page") == "sensory_panel_report",
+    ):
         _nav_button(
-            "📑 Full Report (XLSTAT-style)",
+            "📑 Panel Analysis Report",
             "sensory_panel_report",
             "sidebar_sensory_panel_report",
-        )
-        _nav_button(
-            "📊 Discrimination",
-            "sensory_panel_discrimination",
-            "sidebar_sensory_panel_discrimination",
-        )
-        _nav_button(
-            "🔄 Repeatability",
-            "sensory_panel_repeatability",
-            "sidebar_sensory_panel_repeatability",
-        )
-        _nav_button(
-            "🤝 Agreement",
-            "sensory_panel_agreement",
-            "sidebar_sensory_panel_agreement",
-        )
-        _nav_button(
-            "📏 Scale Usage",
-            "sensory_panel_scale",
-            "sidebar_sensory_panel_scale",
-        )
-        _nav_button(
-            "💪 Discrimination Power",
-            "sensory_discrimination_power",
-            "sidebar_sensory_discrimination_power",
-        )
-        _nav_button(
-            "🎯 Product Characterization",
-            "sensory_product_characterization",
-            "sidebar_sensory_product_characterization",
-        )
-        _nav_button(
-            "👥 Assessor Comparison",
-            "sensory_product_profiles",
-            "sidebar_sensory_product_profiles",
         )
 
     with st.expander(
