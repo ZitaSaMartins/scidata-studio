@@ -19,7 +19,7 @@ from modules.stat_format import format_alpha_percent, select_significance_level
 
 from . import characterization_stats as cs
 from . import panel_stats as ps
-from ._shared import _columns, _need
+from ._shared import _columns, _need, heatmap_height
 from .panel_report import _fmt_p, _guess
 
 _NONE = "— none —"
@@ -123,19 +123,7 @@ def _coefficients(res: dict, alpha: float, confidence: float) -> None:
     st.dataframe(shown.style.format(precision=3).format({"p-value": _fmt_p})
                  .apply(lambda row: [_cell_colour(row["Coefficient"], row["p-value"], alpha)] * len(row), axis=1),
                  width="stretch")
-    c1, c2 = st.columns(2, vertical_alignment="bottom")
-    value = c1.segmented_control("Bars show", ["Coefficient", "Test value"], default="Coefficient",
-                                 key="characterization_coef_value") or "Coefficient"
-    every_product = c2.toggle("One chart per product", value=False, key="characterization_coef_all")
-    st.caption(f"Blue: significantly positive, red: significantly negative, white: not significant "
-               f"({format_alpha_percent(alpha)}). Descriptors sorted from the largest to the smallest value.")
-    if every_product:
-        grid = st.columns(2)
-        for i, name in enumerate(res["products"]):
-            with grid[i % 2]:
-                _coefficient_chart(coefficients[coefficients["Product"] == name].set_index("Descriptor"), name, value, alpha)
-    else:
-        _coefficient_chart(table, product, value, alpha)
+    coefficient_charts(res, alpha, "characterization", product)
     with st.expander("All products side by side"):
         columns = ["Coefficient", "p-value", "Test value"]
         tables = {c: cs.coefficients_wide(coefficients, c) for c in columns}
@@ -143,7 +131,50 @@ def _coefficients(res: dict, alpha: float, confidence: float) -> None:
         st.dataframe(wide.style.format(precision=3), width="stretch")
 
 
-def _coefficient_chart(table: pd.DataFrame, product: str, value: str, alpha: float) -> None:
+def coefficient_charts(res: dict, alpha: float, key: str, product: str | None = None) -> None:
+    """XLSTAT's per-product coefficient bar charts, with a choice of one product or all of them."""
+    coefficients = res["coefficients"]
+    c1, c2, c3 = st.columns(3, vertical_alignment="bottom")
+    if product is None:
+        product = c1.selectbox("Product", res["products"], key=f"{key}_chart_product")
+    value = c2.segmented_control("Bars show", ["Coefficient", "Test value"], default="Coefficient",
+                                 key=f"{key}_coef_value") or "Coefficient"
+    every_product = c3.toggle("One chart per product", value=False, key=f"{key}_coef_all")
+    st.caption(f"Blue: significantly positive, red: significantly negative, white: not significant "
+               f"({format_alpha_percent(alpha)}). Descriptors sorted from the largest to the smallest value.")
+    products = res["products"] if every_product else [product]
+    grid = st.columns(2) if every_product else [st.container()]
+    for i, name in enumerate(products):
+        with grid[i % len(grid)]:
+            _coefficient_chart(coefficients[coefficients["Product"] == name].set_index("Descriptor"), name, value, alpha, key)
+
+
+def significance_heatmap(res: dict, alpha: float, title: str, order: pd.DataFrame | None = None) -> None:
+    """Means table as a heatmap: only cells whose product coefficient is significant are coloured."""
+    means = res["means"] if order is None else order
+    coefficients = res["coefficients"].set_index(["Product", "Descriptor"])
+    z = np.zeros(means.shape)
+    for i, product in enumerate(means.index):
+        for j, descriptor in enumerate(means.columns):
+            coef, p_value = coefficients.loc[(product, descriptor), ["Coefficient", "p-value"]]
+            z[i, j] = np.sign(coef) if p_value < alpha else 0
+    fig = go.Figure(go.Heatmap(
+        z=z, x=[str(c) for c in means.columns], y=[str(r) for r in means.index], zmin=-1, zmax=1,
+        colorscale=[[0, _LOWER], [0.33, _LOWER], [0.33, "white"], [0.67, "white"], [0.67, _HIGHER], [1, _HIGHER]],
+        showscale=False, xgap=1, ygap=1, text=np.round(means.to_numpy(), 2), texttemplate="%{text:.2f}",
+        textfont={"color": "black"}, customdata=means.to_numpy(),
+        hovertemplate="%{y} / %{x}<br>Mean: %{customdata:.3f}<extra></extra>",
+    ))
+    fig.update_xaxes(type="category", side="bottom", tickangle=-30 if means.shape[1] > 8 else 0)
+    fig.update_yaxes(type="category", autorange="reversed")
+    fig.update_layout(title=title, height=heatmap_height(means.shape[0]), plot_bgcolor="#DDDDDD",
+                      margin={"l": 10, "r": 10, "t": 50, "b": 10})
+    st.plotly_chart(fig, width="stretch")
+    st.caption(f"Blue: significantly above the global mean, red: significantly below, white: not significant "
+               f"({format_alpha_percent(alpha)}, t test of the product's coefficient).")
+
+
+def _coefficient_chart(table: pd.DataFrame, product: str, value: str, alpha: float, key: str = "characterization") -> None:
     """XLSTAT-style bar chart of one product's coefficients (or test values) by descriptor."""
     ordered = table.sort_values(value, ascending=False)
     significant = ordered["p-value"] < alpha
@@ -156,7 +187,7 @@ def _coefficient_chart(table: pd.DataFrame, product: str, value: str, alpha: flo
     fig.add_hline(y=0, line_color="#555555", line_width=1)
     fig.update_layout(title=product, xaxis_title="Descriptors", yaxis_title=f"{value}s", height=380,
                       margin={"l": 10, "r": 10, "t": 50, "b": 10})
-    st.plotly_chart(fig, width="stretch", key=f"characterization_coef_chart_{product}")
+    st.plotly_chart(fig, width="stretch", key=f"{key}_coef_chart_{product}")
 
 
 def _cell_colour(coefficient: float, p_value: float, alpha: float) -> str:
@@ -181,6 +212,7 @@ def _means(res: dict, pca: cs.ProfilePCA, alpha: float) -> None:
 
     styled = means.style.format(precision=3).apply(colour, axis=None)
     st.dataframe(styled, width="stretch")
+    significance_heatmap(res, alpha, "Adjusted means by product", order=means)
     buffer = io.BytesIO()
     styled.to_excel(buffer, sheet_name="Adjusted means", engine="openpyxl")
     st.download_button("Download as Excel (with colours)", buffer.getvalue(), "adjusted_means.xlsx",

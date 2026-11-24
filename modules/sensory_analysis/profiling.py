@@ -14,8 +14,13 @@ from statsmodels.formula.api import ols
 from modules.stat_format import format_alpha_percent, select_significance_level, with_formatted_p_values
 
 from . import characterization_stats
-from ._shared import _columns, _compact_letters, _frame, _heatmap, _need
-from .characterization_report import design_inputs, run_product_characterization
+from ._shared import _columns, _compact_letters, _frame, _need
+from .characterization_report import (
+    coefficient_charts,
+    design_inputs,
+    run_product_characterization,
+    significance_heatmap,
+)
 
 
 def _qda(df: pd.DataFrame, title: str = "QDA / Sensory Profile") -> None:
@@ -51,19 +56,32 @@ def _qda(df: pd.DataFrame, title: str = "QDA / Sensory Profile") -> None:
     letters = _tukey_letters(res, alpha)
     if not letters.empty:
         st.subheader("Tukey HSD grouping letters")
-        st.dataframe(letters, width="stretch", hide_index=True)
+        st.dataframe(letters_wide(letters), width="stretch")
         st.caption(
-            "Within each attribute, products sharing a letter are not significantly different "
-            f"(Tukey-Kramer on the {'adjusted ' if design.assessor else ''}means, error term of the model above)."
+            f"{'Adjusted m' if design.assessor else 'M'}ean and grouping letters per product. Within each attribute "
+            "(row), products sharing a letter are not significantly different "
+            f"(Tukey-Kramer, error term of the model above, {format_alpha_percent(alpha)})."
         )
-    means = res["means"]
-    _heatmap(means, "Adjusted mean sensory profile" if design.assessor else "Mean sensory profile")
+    st.subheader("Adjusted mean sensory profile" if design.assessor else "Mean sensory profile")
+    significance_heatmap(res, alpha, "")
+
+    st.subheader("Model coefficients by product")
+    st.caption("Coefficient = the product's adjusted mean minus the average over products (XLSTAT's product characterization chart).")
+    coefficient_charts(res, alpha, f"{title}_qda")
     significant = tests.loc[tests["p-value"] < alpha, "Attribute"].tolist()
     alpha_percent = format_alpha_percent(alpha)
     st.write(
         f"At the {alpha_percent} level, product means differ for: **{', '.join(significant)}**."
         if significant else f"No selected attribute showed a product difference at the {alpha_percent} level."
     )
+
+
+def letters_wide(letters: pd.DataFrame) -> pd.DataFrame:
+    """One row per attribute, one column per product, cells like "7.086 A"."""
+    cells = letters.assign(Cell=[f"{m:.3f} {g}" for m, g in zip(letters["Mean"], letters["Grouping letters"], strict=True)])
+    products = list(dict.fromkeys(letters["Product"]))
+    attributes = list(dict.fromkeys(letters["Attribute"]))
+    return cells.pivot(index="Attribute", columns="Product", values="Cell").reindex(index=attributes, columns=products)
 
 
 def _tukey_letters(res: dict, alpha: float) -> pd.DataFrame:
