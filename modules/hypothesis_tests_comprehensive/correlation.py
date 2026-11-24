@@ -59,7 +59,7 @@ def test_linear_regression(df: pd.DataFrame) -> None:
         output = data.copy()
         output["Predicted"] = predictions
         output["Residual"] = data[outcome] - predictions
-        st.dataframe(output.head(100), use_container_width=True)
+        st.dataframe(output.head(100), width="stretch")
         _show_inference(
             result.pvalue,
             "The predictor has a significant linear relationship with the outcome",

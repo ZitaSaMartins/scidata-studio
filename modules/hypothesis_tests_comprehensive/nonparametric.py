@@ -382,7 +382,7 @@ def test_mood_median(df: pd.DataFrame) -> None:
         for index, (variable, (grouped_values, contingency)) in enumerate(pairwise_inputs.items()):
             _show_variable_section_header(variable, index)
             st.caption("Contingency table: counts above/below the grand median, by group.")
-            st.dataframe(pd.DataFrame(contingency), use_container_width=True)
+            st.dataframe(pd.DataFrame(contingency), width="stretch")
             _display_pairwise_results(grouped_values, pairwise_method, "Median", alpha)
 
 

@@ -144,7 +144,7 @@ def render() -> None:
                         preview_fig = build_preview(name, preview_df, chart_settings)
                         if preview_fig is not None:
                             st.plotly_chart(
-                                preview_fig, use_container_width=True,
+                                preview_fig, width="stretch",
                                 config={"staticPlot": True, "displayModeBar": False},
                                 key=f"preview_{name}"
                             )

@@ -129,7 +129,7 @@ def run_test_variance(df: pd.DataFrame):
             "grouping_variable": grouping_var,
             "alpha": alpha,
         }
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
+        st.dataframe(pd.DataFrame(results), width="stretch")
 
         unequal_variables = [
             result["variable"]
@@ -154,5 +154,5 @@ def run_test_variance(df: pd.DataFrame):
             )
 
         st.markdown("#### Group variance details")
-        st.dataframe(pd.DataFrame(group_summaries), use_container_width=True)
+        st.dataframe(pd.DataFrame(group_summaries), width="stretch")
 

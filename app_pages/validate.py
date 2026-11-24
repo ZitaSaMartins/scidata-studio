@@ -42,7 +42,7 @@ def render() -> None:
                 'Non-Null Count': [df[col].notna().sum() for col in df.columns],
                 'Unique Values': [df[col].nunique() for col in df.columns]
             })
-            st.dataframe(col_info, use_container_width=True)
+            st.dataframe(col_info, width="stretch")
 
         with tab3:
             st.markdown("**Missing Values Analysis:**")
@@ -54,7 +54,7 @@ def render() -> None:
                 'Percentage': missing_pct[missing > 0].values
             })
             if len(missing_df) > 0:
-                st.dataframe(missing_df, use_container_width=True)
+                st.dataframe(missing_df, width="stretch")
             else:
                 st.success("✅ No missing values!")
 

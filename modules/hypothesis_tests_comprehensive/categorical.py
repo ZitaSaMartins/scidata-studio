@@ -88,8 +88,8 @@ def test_chi_square(df: pd.DataFrame) -> None:
         for index, (second, (observed, expected)) in enumerate(detail_tables.items()):
             _show_variable_section_header(second, index)
             st.markdown("**Observed counts**")
-            st.dataframe(observed, use_container_width=True)
+            st.dataframe(observed, width="stretch")
             st.markdown("**Expected counts**")
-            st.dataframe(expected, use_container_width=True)
+            st.dataframe(expected, width="stretch")
 
 

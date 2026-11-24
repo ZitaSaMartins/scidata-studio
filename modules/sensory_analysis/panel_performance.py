@@ -3,6 +3,8 @@ Panel Performance Analysis Module - Complete Version
 Complete sensory panel analysis with professional summary statistics tables.
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -166,7 +168,7 @@ def _panel_discrimination(df: pd.DataFrame) -> None:
     summary_df_display["F"] = summary_df_display["F"].apply(lambda x: f"{x:.3f}")
     summary_df_display["p-value"] = summary_df_display["p-value"].apply(format_p_value)
     
-    st.dataframe(summary_df_display, use_container_width=True, hide_index=True)
+    st.dataframe(summary_df_display, width="stretch", hide_index=True)
     
     # ========== DETAILED ANOVA BREAKDOWN ==========
     st.subheader("🔬 Detailed ANOVA Breakdown")
@@ -176,7 +178,7 @@ def _panel_discrimination(df: pd.DataFrame) -> None:
     anova_detail = _create_discrimination_anova_detail(df, panelist, product, replicate or "", selected_descriptor)
     
     if anova_detail is not None:
-        st.dataframe(anova_detail, use_container_width=True, hide_index=True)
+        st.dataframe(anova_detail, width="stretch", hide_index=True)
         st.caption(f"Mixed Model Type III Sum of Squares ANOVA ({selected_descriptor})")
     
     # ========== HEATMAP ==========
@@ -192,7 +194,7 @@ def _panel_discrimination(df: pd.DataFrame) -> None:
             colorscale="RdYlGn"
         ))
         fig.update_layout(title="F-Statistics Heatmap", height=250)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 # ============================================================
@@ -257,7 +259,7 @@ def _panel_repeatability(df: pd.DataFrame) -> None:
     display_metrics = metrics.copy()
     for col in ["Mean SD", "Median SD", "Std of SD", "Min SD", "Max SD"]:
         display_metrics[col] = display_metrics[col].apply(lambda x: f"{x:.3f}")
-    st.dataframe(display_metrics, use_container_width=True, hide_index=True)
+    st.dataframe(display_metrics, width="stretch", hide_index=True)
     
     # ========== HEATMAP ==========
     st.subheader("🎯 Repeatability Heatmap (Mean Within-SD)")
@@ -286,7 +288,10 @@ def _panel_agreement(df: pd.DataFrame) -> None:
     if not _need(bool(rating_candidates), "Need a numeric rating column."):
         return
     
-    rating = st.selectbox("Rating", rating_candidates, key="pa_rating")
+    # Prefer a real descriptor over design columns such as Session/Replicate
+    design_like = re.compile(r"session|replicat|repetition|^rep$|order|position|^id$", re.IGNORECASE)
+    default_rating = next((i for i, c in enumerate(rating_candidates) if not design_like.search(c)), 0)
+    rating = st.selectbox("Rating", rating_candidates, index=default_rating, key="pa_rating")
     
     # Get matrix for each descriptor
     matrix = df.pivot_table(index=product, columns=panelist, values=rating, aggfunc="mean").dropna()
@@ -303,7 +308,14 @@ def _panel_agreement(df: pd.DataFrame) -> None:
         for _, column in matrix.items()
     )
     denominator = judges**2 * (products**3 - products) - judges * tie_correction
-    w_value = 12 * float(((rank_sums - rank_sums.mean()) ** 2).sum()) / denominator if denominator > 0 else np.nan
+    if denominator <= 0:
+        st.warning(
+            f"Kendall's W can't be computed for **{rating}**: every assessor gave all products the same "
+            "average score, so there is no ranking to compare. Pick a sensory descriptor as the rating "
+            "(not a design column such as Session or Replicate)."
+        )
+        return
+    w_value = 12 * float(((rank_sums - rank_sums.mean()) ** 2).sum()) / denominator
     chi_square = judges * (products - 1) * w_value
     p_value = float(stats.chi2.sf(chi_square, products - 1))
     
@@ -324,14 +336,14 @@ def _panel_agreement(df: pd.DataFrame) -> None:
         "Interpretation": "< 0.05 = Significant agreement"
     }])
     
-    st.dataframe(agreement_summary, use_container_width=True, hide_index=True)
+    st.dataframe(agreement_summary, width="stretch", hide_index=True)
     
     # ========== CORRELATION TABLE ==========
     st.subheader("👥 Pairwise Spearman Correlations")
     corr_matrix = matrix.corr(method="spearman")
     
-    display_corr = corr_matrix.applymap(lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A")
-    st.dataframe(display_corr, use_container_width=True)
+    display_corr = corr_matrix.map(lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A")
+    st.dataframe(display_corr, width="stretch")
     
     _heatmap(corr_matrix, "Correlation Between Assessors")
 
@@ -379,7 +391,7 @@ def _panel_scale(df: pd.DataFrame) -> None:
     
     display_metrics["N"] = display_metrics["N"].astype(int)
     
-    st.dataframe(display_metrics, use_container_width=True, hide_index=True)
+    st.dataframe(display_metrics, width="stretch", hide_index=True)
     
     # ========== COMPARISON HEATMAPS ==========
     col1, col2 = st.columns(2)
@@ -398,7 +410,7 @@ def _panel_scale(df: pd.DataFrame) -> None:
     st.subheader("Distribution by Assessor")
     fig = px.box(long, x=panelist, y=rating_col, color="Descriptor")
     fig.update_layout(height=500, title="Scale Usage Distribution")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 # ============================================================
@@ -455,7 +467,7 @@ def _discrimination_power(df: pd.DataFrame) -> None:
         display_df = disc_df.copy()
         display_df["F-value"] = display_df["F-value"].apply(lambda x: f"{x:.3f}")
         display_df["p-value"] = display_df["p-value"].apply(format_p_value)
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
         
         # Heatmap: Can each assessor discriminate each descriptor?
         st.subheader("🔥 Discrimination Ability Heatmap")
@@ -468,7 +480,7 @@ def _discrimination_power(df: pd.DataFrame) -> None:
         best_summary = disc_df.loc[disc_df.groupby("Descriptor")["F-value"].idxmax()]
         st.dataframe(best_summary[[
             "Descriptor", "Assessor", "F-value", "p-value"
-        ]].sort_values("F-value", ascending=False), use_container_width=True, hide_index=True)
+        ]].sort_values("F-value", ascending=False), width="stretch", hide_index=True)
 
 
 # ============================================================
@@ -506,7 +518,7 @@ def _product_characterization(df: pd.DataFrame) -> None:
         display_char[f"{attr} (SD)"] = df.groupby(product)[attr].std()
         display_char[f"{attr} (N)"] = df.groupby(product)[attr].count()
     
-    st.dataframe(display_char.round(3), use_container_width=True)
+    st.dataframe(display_char.round(3), width="stretch")
     
     # Heatmap: Product profiles
     st.subheader("🔥 Product Profile Heatmap")
@@ -532,7 +544,7 @@ def _product_characterization(df: pd.DataFrame) -> None:
             polar=dict(radialaxis=dict(visible=True, range=[0, df[attributes].max().max()])),
             height=600
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 # ============================================================
@@ -582,7 +594,7 @@ def _product_profiles(df: pd.DataFrame) -> None:
         fig.update_layout(title=f"{attr} - Individual vs Panel Average",
                          xaxis_title=product, yaxis_title="Rating",
                          height=450, hovermode="x")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     
     # Distance to consensus
     st.subheader("📏 Distance to Consensus")
@@ -619,7 +631,7 @@ def _product_profiles(df: pd.DataFrame) -> None:
         st.subheader("📋 Distance to Consensus by Product and Assessor")
         display_consensus = consensus_df.copy()
         display_consensus["Distance to Consensus"] = display_consensus["Distance to Consensus"].apply(lambda x: f"{x:.3f}")
-        st.dataframe(display_consensus, use_container_width=True, hide_index=True)
+        st.dataframe(display_consensus, width="stretch", hide_index=True)
         
         # Heatmap
         pivot_consensus = consensus_df.pivot_table(index="Assessor", 

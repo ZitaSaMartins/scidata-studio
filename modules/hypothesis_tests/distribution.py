@@ -135,7 +135,7 @@ def run_test_distribution(df: pd.DataFrame):
             "variables": saved_results,
             "alpha": 0.05,
         }
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
+        st.dataframe(pd.DataFrame(results), width="stretch")
 
         st.markdown("#### Visual check")
         for col in selected_cols:

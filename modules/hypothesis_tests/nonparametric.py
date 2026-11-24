@@ -147,7 +147,7 @@ def test_chi_square(df: pd.DataFrame):
 
         # Display contingency table
         st.markdown("**Contingency Table:**")
-        st.dataframe(contingency, use_container_width=True)
+        st.dataframe(contingency, width="stretch")
 
 
 def test_wilcoxon(df: pd.DataFrame):

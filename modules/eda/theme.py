@@ -56,7 +56,7 @@ def _plot(fig, settings, title=None):
     )
     if title:
         fig.update_layout(title=dict(text=title, font=dict(size=settings["font_size"] + 4)))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _category_colors(categories: list, settings: dict, key_prefix: str) -> dict:

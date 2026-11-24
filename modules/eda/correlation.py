@@ -54,7 +54,7 @@ def _correlation_heatmap_chart(df: pd.DataFrame, settings: dict, dependent_vars:
                 })
 
     if strong_corr:
-        st.dataframe(pd.DataFrame(strong_corr), use_container_width=True)
+        st.dataframe(pd.DataFrame(strong_corr), width="stretch")
     else:
         st.info("No strong correlations found.")
 

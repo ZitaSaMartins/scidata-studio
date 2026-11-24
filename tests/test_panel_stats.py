@@ -163,3 +163,16 @@ def test_without_session_column(data):
     tests = ps.assessor_tests(data, design, anovas)
     assert tests["p_session"].isna().all()
     assert ps.session_repeatability(data, design) is None
+
+
+def test_incomplete_design_drops_interaction():
+    # 3 assessors, 3 products, assessor C never rated product z: interaction not estimable
+    rows = [(a, p, r, v) for a in "AB" for p in "xyz" for r in (1, 2) for v in [hash((a, p, r)) % 7 + 1.0]]
+    rows += [("C", p, r, float(r + i)) for i, p in enumerate("xy") for r in (1, 2)]
+    df = pd.DataFrame(rows, columns=["Assessor", "Product", "Session", "Score"])
+    design = ps.PanelDesign("Assessor", "Product", ("Score",), "Session")
+    assert not ps.interaction_estimable(df, design)
+    anovas = ps.anova_all(df, design)
+    assert "Product*Assessor" not in anovas["Score"]["Source"].tolist()
+    score = ps.performance_score(ps.assessor_tests(df, design, anovas))
+    assert "No interaction" not in score.index

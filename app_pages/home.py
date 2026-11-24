@@ -6,7 +6,7 @@ from .assets import LOGO_PATH
 def render() -> None:
     logo_col1, logo_col2, logo_col3 = st.columns([1, 2, 1])
     with logo_col2:
-        st.image(str(LOGO_PATH), use_container_width=True)
+        st.image(str(LOGO_PATH), width="stretch")
     st.markdown('<p class="subtitle">Your easy guide to understanding data without coding</p>', unsafe_allow_html=True)
 
     st.markdown("---")

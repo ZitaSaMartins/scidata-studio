@@ -88,6 +88,13 @@ def has_replicates(df: pd.DataFrame, design: PanelDesign) -> bool:
     return bool(df.groupby([design.assessor, design.product]).size().max() > 1)
 
 
+def interaction_estimable(df: pd.DataFrame, design: PanelDesign) -> bool:
+    """Product*Assessor needs every assessor to rate every product, and some ratings repeated."""
+    sizes = df.groupby([design.assessor, design.product]).size()
+    n_cells = df[design.assessor].nunique() * df[design.product].nunique()
+    return len(sizes) == n_cells and bool(sizes.max() > 1)
+
+
 # --------------------------------------------------------------------------- #
 # Summary statistics
 # --------------------------------------------------------------------------- #
@@ -139,8 +146,11 @@ def _full_model(data: pd.DataFrame, design: PanelDesign, descriptor: str, intera
 def mixed_anova(df: pd.DataFrame, design: PanelDesign, descriptor: str) -> pd.DataFrame:
     """Type III table: Source, Type, DF, Sum of squares, Mean squares, F, Pr > F."""
     data = _prepare(df, design)
-    interaction = has_replicates(data, design)
+    data = data.dropna(subset=[descriptor])
+    interaction = interaction_estimable(data, design)
     model = _full_model(data, design, descriptor, interaction)
+    if model.df_resid <= 0:
+        raise ValueError(f"Not enough ratings to fit the ANOVA model for '{descriptor}'.")
     table = anova_lm(model, typ=3)
 
     def row(key_part: str, exclude: str | None = None):
@@ -287,6 +297,8 @@ def performance_score(tests: pd.DataFrame) -> pd.DataFrame:
         "Repeatability": g["not_repeatable"].apply(lambda s: int((~s).sum())),
         "No interaction": g["interaction_ok"].sum(),
     }).astype(int)
+    if tests["p_interaction"].isna().all():  # interaction not estimable
+        score = score.drop(columns="No interaction")
     score["Total"] = score.sum(axis=1)
     return score.reindex(_ordered_levels(tests["Assessor"])).T
 

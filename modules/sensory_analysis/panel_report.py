@@ -69,10 +69,14 @@ def _compute(data: pd.DataFrame, assessor: str, product: str, session: str | Non
 # Formatting helpers
 # --------------------------------------------------------------------------- #
 
-def _guess(columns: list[str], pattern: str, fallback: int) -> int:
-    for i, col in enumerate(columns):
-        if re.search(pattern, col, flags=re.IGNORECASE):
-            return i
+def _guess(df: pd.DataFrame, patterns: list[str], fallback: int) -> int:
+    """Index of the first column matching the patterns (in priority order), skipping ID-like columns."""
+    columns = df.columns.astype(str).tolist()
+    n_rows = len(df)
+    for pattern in patterns:
+        for i, col in enumerate(columns):
+            if re.search(pattern, col, flags=re.IGNORECASE) and df.iloc[:, i].nunique() < n_rows:
+                return i
     return min(fallback, len(columns) - 1)
 
 
@@ -109,9 +113,12 @@ def _summary(data: pd.DataFrame, assessor: str, product: str, session: str | Non
 
 
 def _anova(res: dict, session: str | None) -> None:
-    model = "Y = P + A + S + P*A" if session else "Y = P + A + P*A"
-    st.caption(f"Model: {model}. Product fixed, the other effects random. Type III sums of squares. "
-               "Product and Assessor are tested against the Product*Assessor interaction; Session and the interaction against the error.")
+    sources = next(iter(res["anovas"].values()))["Source"].tolist()
+    has_interaction = "Product*Assessor" in sources
+    model = "Y = P + A" + (" + S" if session else "") + (" + P*A" if has_interaction else "")
+    tested = ("Product and Assessor are tested against the Product*Assessor interaction; Session and the interaction against the error."
+              if has_interaction else "All effects are tested against the error.")
+    st.caption(f"Model: {model}. Product fixed, the other effects random. Type III sums of squares. {tested}")
     for descriptor, table in res["anovas"].items():
         with st.expander(f"ANOVA with {descriptor} as dependent variable", expanded=False):
             show = table.drop(columns="Denominator")
@@ -324,8 +331,8 @@ def run_panel_report(df: pd.DataFrame) -> None:
         return
 
     c1, c2, c3 = st.columns(3)
-    assessor = c1.selectbox("Assessors", columns, index=_guess(columns, r"assess|panel|judge|subject|taster", 0), key="panel_report_assessor_col")
-    product = c2.selectbox("Products", columns, index=_guess(columns, r"product|sample|prod", 1), key="panel_report_product_col")
+    assessor = c1.selectbox("Assessors", columns, index=_guess(df, [r"assess", r"panel|judge|subject|taster|consumer"], 0), key="panel_report_assessor_col")
+    product = c2.selectbox("Products", columns, index=_guess(df, [r"product", r"sample|prod"], 1), key="panel_report_product_col")
     session_options = [_NONE] + columns
     session_index = next((i + 1 for i, c in enumerate(columns) if re.search(r"session|replicat|repetition|^rep$", c, re.IGNORECASE)), 0)
     session_choice = c3.selectbox("Sessions (optional)", session_options, index=session_index, key="panel_report_session_col")
@@ -352,9 +359,11 @@ def run_panel_report(df: pd.DataFrame) -> None:
     if data[assessor].nunique() < 2 or data[product].nunique() < 2:
         st.error("Need at least two assessors and two products.")
         return
-    if data.groupby([assessor, product]).size().max() < 2:
-        st.warning("Each assessor rated each product only once, so the interaction and repeatability can't be estimated. "
-                   "Results use the model Y = P + A.")
+    design_check = ps.PanelDesign(assessor, product, tuple(descriptors), session)
+    if not ps.interaction_estimable(data, design_check):
+        st.warning("The Product*Assessor interaction can't be estimated: either some assessors did not rate every product, "
+                   "or no product was rated more than once by the same assessor. Results use the model without the interaction, "
+                   "so the agreement (+/−) codes and the 'No interaction' score are not available.")
 
     try:
         with st.spinner("Running the panel analysis…"):

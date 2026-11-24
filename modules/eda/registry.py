@@ -53,7 +53,7 @@ def show_summary_statistics(df: pd.DataFrame):
     summary['Missing'] = df[numeric_cols].isnull().sum()
     summary['Missing %'] = (summary['Missing'] / len(df) * 100).round(2)
 
-    st.dataframe(summary, use_container_width=True)
+    st.dataframe(summary, width="stretch")
 
     # Skewness and Kurtosis
     st.markdown("#### Distribution Shape (Skewness & Kurtosis)")
@@ -64,7 +64,7 @@ def show_summary_statistics(df: pd.DataFrame):
         'Kurtosis': [stats.kurtosis(df[col].dropna()) for col in numeric_cols]
     })
 
-    st.dataframe(skew_kurt, use_container_width=True)
+    st.dataframe(skew_kurt, width="stretch")
 
     st.caption("Skewness: Negative (left-skewed) | 0 (symmetric) | Positive (right-skewed)")
     st.caption("Kurtosis: Negative (flat) | 0 (normal) | Positive (peaked)")
