@@ -1,9 +1,9 @@
-"""Panel analysis computations modelled on XLSTAT's "Panel analysis" tool.
+"""Panel analysis computations for sensory data.
 
 Pure pandas / statsmodels code (no Streamlit) so every number can be tested
 against the reference output in ``tuto_PAN_EN.xls``.
 
-Model per descriptor (XLSTAT default)::
+Model per descriptor (default)::
 
     Y = Product + Assessor + Session + Product*Assessor
 
@@ -25,9 +25,6 @@ Assessor-level indicators (CAP table, performance score):
 * **Repeatability**: not repeatable ("!") when the per-assessor session effect
   is significant or the assessor's residual variance is significantly larger
   than the panel's (both at ``alpha``).
-
-On the XLSTAT tutorial data these rules reproduce every discrimination and
-agreement code and 87 of the 90 repeatability flags.
 """
 
 from __future__ import annotations
@@ -274,7 +271,7 @@ def assessor_tests(df: pd.DataFrame, design: PanelDesign, anovas: dict[str, pd.D
 
 
 def ability_to_discriminate(tests: pd.DataFrame, assessor: str) -> pd.DataFrame:
-    """XLSTAT layout: rows MSE / F / Pr > F, one column per descriptor."""
+    """Layout: rows MSE / F / Pr > F, one column per descriptor."""
     sub = tests[tests["Assessor"] == assessor].set_index("Descriptor")
     return sub[["MSE", "F", "Pr > F"]].T
 
@@ -384,7 +381,7 @@ def assessor_product_means(df: pd.DataFrame, design: PanelDesign) -> pd.DataFram
 
 
 def means_wide(means: pd.DataFrame) -> pd.DataFrame:
-    """XLSTAT 'Means for each judge' layout: rows assessors, columns product|descriptor."""
+    """'Means for each judge' layout: rows assessors, columns product|descriptor."""
     descriptors = list(means.columns)
     products = list(means.index.get_level_values(1).unique())
     wide = means.unstack(level=1)  # columns: (descriptor, product)

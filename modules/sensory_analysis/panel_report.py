@@ -1,6 +1,6 @@
-"""Full panel analysis report, laid out like XLSTAT's "Panel analysis" sheet.
+"""Full panel analysis report, laid out like 's "Panel analysis" sheet.
 
-All numbers come from ``panel_stats`` (tested against XLSTAT); this module
+All numbers come from ``panel_stats``; this module
 only handles inputs, caching and display.
 """
 
@@ -403,7 +403,7 @@ def _clustering(res: dict) -> None:
 
 def run_panel_report(df: pd.DataFrame) -> None:
     st.header("📑 Panel Analysis Report")
-    st.write("A complete panel performance report in the layout of XLSTAT's *Panel analysis*: "
+    st.write("A complete panel performance report *Panel analysis*: "
              "mixed-model ANOVA, CAP table, assessor performance, consensus, session repeatability and multivariate views.")
 
     columns = df.columns.astype(str).tolist()

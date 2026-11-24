@@ -10,7 +10,7 @@ Highlights:
   numbers instead of a single text column.
 * Excel files (.xlsx, .xlsm, .xls, .xlsb, .ods) are read with the ``calamine``
   engine, which also handles legacy ``.xls`` files without needing ``xlrd``.
-  Hidden sheets (e.g. XLSTAT's ``*_HID`` sheets) are skipped when listing.
+  Hidden sheets (e.g. ``*_HID`` sheets) are skipped when listing.
 """
 
 from __future__ import annotations

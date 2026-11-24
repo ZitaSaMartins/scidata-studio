@@ -337,8 +337,9 @@ data-analysis-dashboard/
 │   │   ├── __init__.py            # Re-exports run_sensory_page and compatibility wrappers
 │   │   ├── _shared.py             # Data prep, significance labelling, common plots
 │   │   ├── discrimination.py      # Triangle/paired/duo-trio/tetrad and ranking tests
+│   │   ├── discrimination_stats.py # d-prime, power, response scoring (tested)
 │   │   ├── profiling.py           # QDA, temporal curves, product characterization
-│   │   ├── panel_stats.py         # Panel performance statistics (XLSTAT-style, tested)
+│   │   ├── panel_stats.py         # Panel performance statistics (tested)
 │   │   ├── panel_report.py        # Panel Analysis Report page
 │   │   ├── cata_jar.py            # Check-All-That-Apply and JAR penalty analysis
 │   │   ├── hedonic.py             # Liking comparisons, segmentation, preference mapping
