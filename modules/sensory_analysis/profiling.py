@@ -13,45 +13,72 @@ from statsmodels.formula.api import ols
 
 from modules.stat_format import format_alpha_percent, select_significance_level, with_formatted_p_values
 
-from ._shared import _columns, _frame, _heatmap, _need, _product_grouping_letters, _product_tests
+from . import characterization_stats
+from ._shared import _columns, _compact_letters, _frame, _heatmap, _need
+from .characterization_report import design_inputs, run_product_characterization
 
 
 def _qda(df: pd.DataFrame, title: str = "QDA / Sensory Profile") -> None:
     st.header(title)
-    st.write("Summarises product profiles and runs a one-way product ANOVA for each attribute.")
-    numeric, _ = _columns(df)
-    if not _need(bool(numeric) and df.shape[1] >= 2, "Need a product column and numeric sensory attributes."):
-        return
-    product = st.selectbox("Product", [str(c) for c in df.columns], key=f"{title}_product")
-    attributes = st.multiselect(
-        "Attributes", [c for c in numeric if c != product], default=[c for c in numeric if c != product][:6],
-        key=f"{title}_attributes",
+    st.write(
+        "Summarises product profiles and runs an ANOVA per attribute. With an assessor column the model is "
+        "Y = Product + Assessor (as in XLSTAT), so differences in how assessors use the scale are not counted as error."
     )
-    if not _need(bool(attributes), "Select at least one attribute."):
+    design = design_inputs(df, f"{title}_qda", with_session=False)
+    if design is None:
         return
     alpha = select_significance_level()
-    clean = _frame(df, [product, *attributes])
-    if not _need(clean[product].nunique() >= 2, "Need at least two products."):
+    attributes = list(design.descriptors)
+    clean = _frame(df, [*design.factors, *attributes])
+    if not _need(clean[design.product].nunique() >= 2, "Need at least two products."):
         return
-    profile = clean.groupby(product, observed=True)[attributes].agg(["mean", "std", "count"])
+    try:
+        res = characterization_stats.analyse(clean, design)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    profile = clean.groupby(design.product, observed=True)[attributes].agg(["mean", "std", "count"])
     st.subheader("Product summaries")
     st.dataframe(profile, width="stretch")
-    tests = _product_tests(clean, product, attributes, alpha)
+
     st.subheader("Inferential product comparisons")
-    st.dataframe(with_formatted_p_values(tests, ["p-value"]), width="stretch")
-    letters = _product_grouping_letters(clean, product, attributes, alpha)
+    st.caption(f"Model: {design.model_label}. Test value = normal quantile of the p-value (larger = more discriminating).")
+    tests = res["power"].rename(columns={"Descriptors": "Attribute", "p-values": "p-value", "Test values": "Test value"})
+    tests[f"Significant ({format_alpha_percent(alpha)})"] = np.where(tests["p-value"] < alpha, "Yes", "No")
+    tests = tests[["Attribute", "F", "p-value", "Test value", f"Significant ({format_alpha_percent(alpha)})"]]
+    st.dataframe(with_formatted_p_values(tests, ["p-value"]), width="stretch", hide_index=True)
+
+    letters = _tukey_letters(res, alpha)
     if not letters.empty:
         st.subheader("Tukey HSD grouping letters")
-        st.dataframe(letters, width="stretch")
-        st.caption("Within each attribute, products sharing a letter are not significantly different.")
-    means = clean.groupby(product, observed=True)[attributes].mean()
-    _heatmap(means, "Mean sensory profile")
-    significant = tests.loc[tests["p-value"] < alpha, "Attribute"].tolist() if not tests.empty else []
+        st.dataframe(letters, width="stretch", hide_index=True)
+        st.caption(
+            "Within each attribute, products sharing a letter are not significantly different "
+            f"(Tukey-Kramer on the {'adjusted ' if design.assessor else ''}means, error term of the model above)."
+        )
+    means = res["means"]
+    _heatmap(means, "Adjusted mean sensory profile" if design.assessor else "Mean sensory profile")
+    significant = tests.loc[tests["p-value"] < alpha, "Attribute"].tolist()
     alpha_percent = format_alpha_percent(alpha)
     st.write(
         f"At the {alpha_percent} level, product means differ for: **{', '.join(significant)}**."
         if significant else f"No selected attribute showed a product difference at the {alpha_percent} level."
     )
+
+
+def _tukey_letters(res: dict, alpha: float) -> pd.DataFrame:
+    pairs = res["pairs"]
+    rows: list[dict[str, object]] = []
+    for attribute, means in res["means"].items():
+        subset = pairs[(pairs["Descriptor"] == attribute) & (pairs["p-value (Tukey)"] < alpha)]
+        significant = {tuple(sorted((a, b))) for a, b in zip(subset["Product 1"], subset["Product 2"], strict=True)}
+        products = [str(p) for p in means.dropna().index]
+        letters = _compact_letters(products, significant)
+        rows.extend(
+            {"Attribute": attribute, "Product": product, "Mean": float(means[product]), "Grouping letters": letters[product]}
+            for product in products
+        )
+    return pd.DataFrame(rows)
 
 
 def _temporal(df: pd.DataFrame) -> None:
@@ -128,5 +155,5 @@ def _temporal(df: pd.DataFrame) -> None:
 
 
 def _product_characterization(df: pd.DataFrame) -> None:
-    _qda(df, "Product Characterization")
+    run_product_characterization(df)
 

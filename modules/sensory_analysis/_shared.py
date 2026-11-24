@@ -9,10 +9,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from scipy import stats
-from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-from modules.stat_format import format_alpha_percent, format_p_value
+from modules.stat_format import format_p_value
 
 
 def _columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
@@ -146,77 +144,4 @@ def _scatter_labels(
     fig.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
-
-
-def _product_tests(
-    data: pd.DataFrame,
-    product: str,
-    attributes: Sequence[str],
-    alpha: float,
-) -> pd.DataFrame:
-    rows: list[dict[str, float | str | int]] = []
-    for attribute in attributes:
-        groups = [
-            group[attribute].dropna().to_numpy()
-            for _, group in data.groupby(product, observed=True)
-            if group[attribute].notna().sum() > 1
-        ]
-        if len(groups) < 2:
-            continue
-        statistic, p_value = stats.f_oneway(*groups)
-        rows.append(
-            {
-                "Attribute": attribute,
-                "F": float(statistic),
-                "p-value": float(p_value),
-                f"Significant ({format_alpha_percent(alpha)})": "Yes" if p_value < alpha else "No",
-                "Groups": len(groups),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _product_grouping_letters(
-    data: pd.DataFrame,
-    product: str,
-    attributes: Sequence[str],
-    alpha: float,
-) -> pd.DataFrame:
-    rows: list[dict[str, object]] = []
-    for attribute in attributes:
-        clean = data[[product, attribute]].dropna()
-        counts = clean.groupby(product, observed=True).size()
-        valid_products = counts[counts >= 2].index
-        clean = clean[clean[product].isin(valid_products)]
-        if clean[product].nunique() < 2:
-            continue
-        labels = clean[product].astype(str).to_numpy()
-        tukey = pairwise_tukeyhsd(clean[attribute].to_numpy(), labels, alpha=alpha)
-        first_indices, second_indices = tukey._multicomp.pairindices
-        significant_pairs: set[tuple[str, str]] = set()
-        for index, (first_index, second_index) in enumerate(zip(first_indices, second_indices, strict=False)):
-            if tukey.reject[index]:
-                significant_pairs.add(
-                    tuple(
-                        sorted(
-                            (
-                                str(tukey._multicomp.groupsunique[first_index]),
-                                str(tukey._multicomp.groupsunique[second_index]),
-                            )
-                        )
-                    )
-                )
-        products = [str(value) for value in valid_products]
-        letters = _compact_letters(products, significant_pairs)
-        means = clean.groupby(product, observed=True)[attribute].mean()
-        rows.extend(
-            {
-                "Attribute": attribute,
-                "Product": str(product_name),
-                "Mean": float(mean),
-                "Grouping letters": letters[str(product_name)],
-            }
-            for product_name, mean in means.items()
-        )
-    return pd.DataFrame(rows)
 

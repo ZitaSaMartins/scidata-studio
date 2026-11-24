@@ -83,7 +83,7 @@ A free, no-code/low-code web application for data analysis, hypothesis testing, 
   tetrad, and ranking tests
 - Descriptive QDA/sensory profiling and temporal sensory methods
 - Panel discrimination, repeatability, agreement/consensus, and scale-use checks
-- Product characterization with inferential comparisons and product maps
+- Product characterization (XLSTAT-style: discriminating power, model coefficients, adjusted means, PCA map with bootstrap ellipses)
 - CATA data validation, Cochran's Q with pairwise letters, attribute
   independence testing, Correspondence Analysis, correlation/PCoA mapping, and
   an ideal-product penalty analysis (must-have / nice-to-have / must-not-have)
@@ -338,7 +338,9 @@ data-analysis-dashboard/
 │   │   ├── _shared.py             # Data prep, significance labelling, common plots
 │   │   ├── discrimination.py      # Triangle/paired/duo-trio/tetrad and ranking tests
 │   │   ├── discrimination_stats.py # d-prime, power, response scoring (tested)
-│   │   ├── profiling.py           # QDA, temporal curves, product characterization
+│   │   ├── profiling.py           # QDA and temporal curves
+│   │   ├── characterization_stats.py # Product characterization statistics (tested)
+│   │   ├── characterization_report.py # Product Characterization page
 │   │   ├── panel_stats.py         # Panel performance statistics (tested)
 │   │   ├── panel_report.py        # Panel Analysis Report page
 │   │   ├── cata_jar.py            # Check-All-That-Apply and JAR penalty analysis
